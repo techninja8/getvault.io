@@ -1,26 +1,30 @@
-// Entry Point for Vault's storage engine service
-
 package main
 
 import (
-	"github.com/techninja8/getvault.io/datastorage"
 	"log"
+
+	"github.com/techninja8/getvault.io/pkg/datastorage"
+	shardstore "github.com/techninja8/getvault.io/pkg/sharding"
 )
 
 func main() {
-	// Sample data to store
+	// Example data to store.
 	data := []byte("Hello, Vault Storage!")
 
-	// Store data and obtain unique DataID
-	dataID, storeErr := datastorage.storeData(data)
-	if storeErr != nil {
-		log.Fatalf("Failed to store data: %v", storeErr)
-	}
-	log.Printf("Data stored with ID: %s", &dataID)
+	// Initialize the shard storage backend.
+	store := shardstore.NewInMemoryShardStore()
 
-	retrievedData, retrieveErr := datastorage.retrievedData(dataID)
-	if retrieveErr != nil {
-		log.Fatalf("Failed to retrieve data %v", retrieveErr)
+	// Store the data.
+	dataID, err := datastorage.StoreData(data, store)
+	if err != nil {
+		log.Fatalf("Failed to store data: %v", err)
+	}
+	log.Printf("Data stored with ID: %s", dataID)
+
+	// Retrieve the data.
+	retrievedData, err := datastorage.RetrieveData(dataID, store)
+	if err != nil {
+		log.Fatalf("Failed to retrieve data: %v", err)
 	}
 	log.Printf("Retrieved Data: %s", string(retrievedData))
 }
