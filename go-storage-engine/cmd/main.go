@@ -29,7 +29,7 @@ func main() {
 
 	app := &cli.App{
 		Name:  "Vault Storage 1.0",
-		Usage: "Distrubuted Storage and Retrieval of Erasure-coded Data Shards Using Vault's Storage Engine",
+		Usage: "Distributed Storage and Retrieval of Erasure-coded Data Shards Using Vault's Storage Engine",
 		Commands: []*cli.Command{
 			{
 				Name:    "store",
