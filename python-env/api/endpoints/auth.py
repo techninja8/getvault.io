@@ -1,1 +1,0 @@
-# Endpoints for /login and /logout

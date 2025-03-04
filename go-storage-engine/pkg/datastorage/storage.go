@@ -1,10 +1,16 @@
 package datastorage
 
 import (
+	"bufio"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"fmt"
+	"log"
 	"math/rand"
+	"os"
+	"strings"
+	"time"
 
 	"go.uber.org/zap"
 
@@ -46,8 +52,48 @@ func GenerateDataID(data []byte) string {
 	return hex.EncodeToString(hash[:])
 }
 
+func MetadataFileReader(filename string, key string) (string, error) {
+	file, err := os.Open(filename)
+	if err != nil {
+		return "", fmt.Errorf("Error Opening File")
+	}
+	defer file.Close()
+
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		line := scanner.Text()
+		parts := strings.SplitN(line, ": ", 2)
+		// If not key value, pls continue
+		if len(parts) != 2 {
+			continue
+		}
+		k, v := strings.TrimSpace(parts[0]), strings.TrimSpace(parts[1])
+		if k == key {
+			return v, nil
+		}
+	}
+
+	if err := scanner.Err(); err != nil {
+		return "", fmt.Errorf("failed to read file %w", err)
+	}
+
+	return "", errors.New("Invalid")
+}
+
+func MetadataFileNameCreator() string {
+	const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+	seededRand := rand.New(rand.NewSource(time.Now().UnixNano()))
+	b := make([]byte, 12)
+	for i := range b {
+		b[i] = charset[seededRand.Intn(len(charset))]
+	}
+	return "vault_session_" + string(b) + ".vmd"
+}
+
 // StoreData encrypts data, applies erasure coding, and stores each shard.
 func StoreData(data []byte, store sharding.ShardStore, cfg *config.Config, logger *zap.Logger) (string, error) {
+	newmetadatafile := MetadataFileNameCreator()
+
 	key, err := GetEncryptionKey(cfg)
 	if err != nil {
 		logger.Error("Failed to get encryption key", zap.Error(err))
@@ -76,13 +122,38 @@ func StoreData(data []byte, store sharding.ShardStore, cfg *config.Config, logge
 		}
 	}
 
+	dataToAppend := "dataID: " + dataID
+	file, err := os.OpenFile(newmetadatafile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		log.Fatal("Couldn't open or create new metadata file")
+	}
+	defer file.Close()
+
+	if _, err := file.WriteString(dataToAppend + "\n"); err != nil {
+		log.Fatal("Couldn't update metadata content, ", err)
+	}
+
+	/*
+		TODO: Create a File, Append the dataID to a file along with the location of the shards
+	*/
+
 	logger.Info("Data stored successfully", zap.String("dataID", dataID))
 	return dataID, nil
 }
 
 // RetrieveData assembles shards, decodes, and decrypts the data.
 // Tolerates missing shards within parity limits.
-func RetrieveData(dataID string, store sharding.ShardStore, cfg *config.Config, logger *zap.Logger) ([]byte, error) {
+func RetrieveData(metadatafile string, store sharding.ShardStore, cfg *config.Config, logger *zap.Logger) ([]byte, error) {
+	/*
+		TODO: Take in file as replacement instead of dataID, we'll read dataID from that file
+		TODO: Structure the metadata file
+	*/
+	metakey := "dataID"
+	dataID, err := MetadataFileReader(metadatafile, metakey)
+	if err != nil {
+		log.Fatal("Error Reading MetaData")
+	}
+
 	totalShards := erasurecoding.DataShards + erasurecoding.ParityShards
 	shards := make([][]byte, totalShards)
 	missing := 0

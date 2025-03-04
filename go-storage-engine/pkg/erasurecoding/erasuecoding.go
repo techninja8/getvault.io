@@ -7,8 +7,8 @@ import (
 )
 
 var (
-	DataShards   = 4
-	ParityShards = 2
+	DataShards   = 8
+	ParityShards = 6
 )
 
 // Encode splits and encodes the data into shards.

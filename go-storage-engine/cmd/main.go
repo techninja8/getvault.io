@@ -28,8 +28,8 @@ func main() {
 	// store := sharding.NewS3ShardStore(cfg.Bucket, cfg.S3Endpoint)
 
 	app := &cli.App{
-		Name:  "Vault Storage CLI",
-		Usage: "Store and retrieve data using the Vault storage engine",
+		Name:  "Vault Storage 1.0",
+		Usage: "Distrubuted Storage and Retrieval of Erasure-coded Data Shards Using Vault's Storage Engine",
 		Commands: []*cli.Command{
 			{
 				Name:    "store",
@@ -53,14 +53,14 @@ func main() {
 			{
 				Name:    "retrieve",
 				Aliases: []string{"r"},
-				Usage:   "Retrieve data by DataID. Usage: retrieve <dataID>",
+				Usage:   "Retrieve Data From Metadata File. Usage: retrieve <metadatafile>",
 				Action: func(c *cli.Context) error {
-					dataID := c.Args().First()
-					if dataID == "" {
-						fmt.Println("Please provide a DataID")
+					metadatafile := c.Args().First()
+					if metadatafile == "" {
+						fmt.Println("Please provide a valid DataID")
 						return nil
 					}
-					data, err := datastorage.RetrieveData(dataID, store, cfg, logger)
+					data, err := datastorage.RetrieveData(metadatafile, store, cfg, logger)
 					if err != nil {
 						logger.Error("Retrieve failed", zap.Error(err))
 						return err
