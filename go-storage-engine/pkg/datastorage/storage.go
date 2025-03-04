@@ -133,10 +133,6 @@ func StoreData(data []byte, store sharding.ShardStore, cfg *config.Config, logge
 		log.Fatal("Couldn't update metadata content, ", err)
 	}
 
-	/*
-		TODO: Create a File, Append the dataID to a file along with the location of the shards
-	*/
-
 	logger.Info("Data stored successfully", zap.String("dataID", dataID))
 	return dataID, nil
 }
@@ -144,10 +140,6 @@ func StoreData(data []byte, store sharding.ShardStore, cfg *config.Config, logge
 // RetrieveData assembles shards, decodes, and decrypts the data.
 // Tolerates missing shards within parity limits.
 func RetrieveData(metadatafile string, store sharding.ShardStore, cfg *config.Config, logger *zap.Logger) ([]byte, error) {
-	/*
-		TODO: Take in file as replacement instead of dataID, we'll read dataID from that file
-		TODO: Structure the metadata file
-	*/
 	metakey := "dataID"
 	dataID, err := MetadataFileReader(metadatafile, metakey)
 	if err != nil {
