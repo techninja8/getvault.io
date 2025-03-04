@@ -17,8 +17,8 @@ func (c Content) CalculateHash() ([]byte, error) {
 	return h[:], nil
 }
 
-func (c Content) Equals(other merkletree.Content) bool {
-	return string(c.data) == string(other.(Content).data)
+func (c Content) Equals(other merkletree.Content) (bool, error) {
+	return string(c.data) == string(other.(Content).data), nil
 }
 
 // BuildMerkleTree constructs a Merkle tree from the provided data slices.
@@ -36,9 +36,9 @@ func BuildMerkleTree(dataSlices [][]byte) (*merkletree.MerkleTree, error) {
 
 // GetProof returns a textual representation of the Merkle proof for a given content.
 func GetProof(tree *merkletree.MerkleTree, content []byte) (string, error) {
-	proof, err := tree.GetMerklePath(Content{data: content})
+	proof, indices, err := tree.GetMerklePath(Content{data: content})
 	if err != nil {
 		return "", err
 	}
-	return fmt.Sprintf("%v", proof), nil
+	return fmt.Sprintf("proof: %v, indices: %v", proof, indices), nil
 }
