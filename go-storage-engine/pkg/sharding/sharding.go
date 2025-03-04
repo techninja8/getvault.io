@@ -5,6 +5,7 @@ import (
 	"sync"
 )
 
+// ShardStore defines the interface for storing and retrieving shards.
 type ShardStore interface {
 	StoreShard(dataID string, index int, shard []byte) error
 	RetrieveShard(dataID string, index int) ([]byte, error)

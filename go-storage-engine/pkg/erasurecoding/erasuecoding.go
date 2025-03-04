@@ -1,17 +1,19 @@
 package erasurecoding
 
 import (
+	"bytes"
+
 	"github.com/klauspost/reedsolomon"
 )
 
-const (
-	dataShards   = 4
-	parityShards = 2
+var (
+	DataShards   = 4
+	ParityShards = 2
 )
 
 // Encode splits and encodes the data into shards.
 func Encode(data []byte) ([][]byte, error) {
-	enc, err := reedsolomon.New(dataShards, parityShards)
+	enc, err := reedsolomon.New(DataShards, ParityShards)
 	if err != nil {
 		return nil, err
 	}
@@ -27,7 +29,7 @@ func Encode(data []byte) ([][]byte, error) {
 
 // Decode reconstructs the original data from shards.
 func Decode(shards [][]byte) ([]byte, error) {
-	enc, err := reedsolomon.New(dataShards, parityShards)
+	enc, err := reedsolomon.New(DataShards, ParityShards)
 	if err != nil {
 		return nil, err
 	}
@@ -35,9 +37,9 @@ func Decode(shards [][]byte) ([]byte, error) {
 		return nil, err
 	}
 	// Join shards back into a single byte slice.
-	data, err := enc.Join(nil, shards, -1)
-	if err != nil {
+	var buf bytes.Buffer
+	if err = enc.Join(&buf, shards, len(shards[0])*DataShards); err != nil {
 		return nil, err
 	}
-	return data, nil
+	return buf.Bytes(), nil
 }
