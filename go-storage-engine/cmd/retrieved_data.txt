@@ -1,0 +1,24 @@
+Lorem ipsum dolor sit amet, consectetur adipiscing elit. Nulla facilisi.  
+The quick brown fox jumps over the lazy dog.  
+1234567890!@#$%^&*()_+-=[]{}|;:'",.<>?/  
+Random test data for file.txt - use it however you like!  
+abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ  
+🚀 Testing Unicode: 你好, नमस्ते, مرحبا, Привет,こんにちは  
+Timestamp: 2025-03-04 12:34:56 UTC  
+Error: Something went wrong. Please try again later.  
+{"key": "value", "list": [1, 2, 3, 4], "nested": {"a": "b"}}  
+UUID: d3f45a67-89bc-4def-0123-456789abcdef  
+Binary test: 01010100 01100101 01110011 01110100  
+Lorem ipsum dolor sit amet, consectetur adipiscing elit. Nulla facilisi.  
+The quick brown fox jumps over the lazy dog.  
+1234567890!@#$%^&*()_+-=[]{}|;:'",.<>?/  
+Random test data for file.txt - use it however you like!  
+abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ  
+🚀 Testing Unicode: 你好, नमस्ते, مرحبا, Привет,こんにちは  
+Timestamp: 2025-03-04 12:34:56 UTC  
+Error: Something went wrong. Please try again later.  
+{"key": "value", "list": [1, 2, 3, 4], "nested": {"a": "b"}}  
+UUID: d3f45a67-89bc-4def-0123-456789abcdef  
+Binary test: 01010100 01100101 01110011 01110100  
+
+;h

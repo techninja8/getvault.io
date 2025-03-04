@@ -1,87 +1,67 @@
 package main
 
 import (
-	"bufio"
 	"fmt"
 	"os"
-	"strings"
+
+	"github.com/urfave/cli/v2"
+	"go.uber.org/zap"
 
 	"github.com/techninja8/getvault.io/pkg/config"
 	"github.com/techninja8/getvault.io/pkg/datastorage"
 	"github.com/techninja8/getvault.io/pkg/sharding"
-	"github.com/urfave/cli/v2"
-	"go.uber.org/zap"
 )
 
 func main() {
-	// Load configuration.
-	cfg := config.LoadConfig()
-
-	// Initialize production logger.
 	logger, _ := zap.NewProduction()
 	defer logger.Sync()
 
-	// Choose a shard store backend.
-	// For demonstration, we'll use the in-memory store.
+	cfg := config.LoadConfig()
 	store := sharding.NewInMemoryShardStore()
-	// To use the S3 store, uncomment below:
-	// store := sharding.NewS3ShardStore(cfg.Bucket, cfg.S3Endpoint)
 
 	app := &cli.App{
-		Name:  "Vault Storage 1.0",
-		Usage: "Distributed Storage and Retrieval of Erasure-coded Data Shards Using Vault's Storage Engine",
+		Name:  "vault",
+		Usage: "A CLI for storing and retrieving encrypted, erasure-coded data",
 		Commands: []*cli.Command{
 			{
-				Name:    "store",
-				Aliases: []string{"s"},
-				Usage:   "Store data. Usage: store \"your data here\"",
+				Name:  "store",
+				Usage: "Store a file",
 				Action: func(c *cli.Context) error {
-					data := []byte(c.Args().First())
-					if len(data) == 0 {
-						fmt.Println("Please provide data to store")
-						return nil
+					if c.NArg() < 1 {
+						return fmt.Errorf("please provide a file to store")
+					}
+					filePath := c.Args().Get(0)
+					data, err := os.ReadFile(filePath)
+					if err != nil {
+						return fmt.Errorf("failed to read file: %w", err)
 					}
 					dataID, err := datastorage.StoreData(data, store, cfg, logger)
 					if err != nil {
 						logger.Error("Store failed", zap.Error(err))
-						return err
+						return fmt.Errorf("store failed: %w", err)
 					}
-					fmt.Printf("Data stored successfully with ID: %s\n", dataID)
+					fmt.Printf("Data stored with ID: %s\n", dataID)
 					return nil
 				},
 			},
 			{
-				Name:    "retrieve",
-				Aliases: []string{"r"},
-				Usage:   "Retrieve Data From Metadata File. Usage: retrieve <metadatafile>",
+				Name:  "retrieve",
+				Usage: "Retrieve data using a metadata file",
 				Action: func(c *cli.Context) error {
-					metadatafile := c.Args().First()
-					if metadatafile == "" {
-						fmt.Println("Please provide a valid Metadata file (.vmd)")
-						return nil
+					if c.NArg() < 1 {
+						return fmt.Errorf("please provide a metadata file")
 					}
-					data, err := datastorage.RetrieveData(metadatafile, store, cfg, logger)
+					metadataFile := c.Args().Get(0)
+					data, err := datastorage.RetrieveData(metadataFile, store, cfg, logger)
 					if err != nil {
 						logger.Error("Retrieve failed", zap.Error(err))
-						return err
+						return fmt.Errorf("retrieve failed: %w", err)
 					}
-					fmt.Printf("Retrieved Data: %s\n", string(data))
-					return nil
-				},
-			},
-			{
-				Name:    "exit",
-				Aliases: []string{"x"},
-				Usage:   "Exit the CLI",
-				Action: func(c *cli.Context) error {
-					reader := bufio.NewReader(os.Stdin)
-					fmt.Print("Are you sure you want to exit? (y/n): ")
-					resp, _ := reader.ReadString('\n')
-					resp = strings.TrimSpace(strings.ToLower(resp))
-					if resp == "y" || resp == "yes" {
-						fmt.Println("Exiting CLI...")
-						os.Exit(0)
+					outputFile := "retrieved_data.txt"
+					if err := os.WriteFile(outputFile, data, 0644); err != nil {
+						return fmt.Errorf("failed to write retrieved data: %w", err)
 					}
+					fmt.Printf("Data retrieved and saved to: %s\n", outputFile)
 					return nil
 				},
 			},

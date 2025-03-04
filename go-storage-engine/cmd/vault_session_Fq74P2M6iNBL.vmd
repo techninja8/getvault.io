@@ -1,0 +1,8 @@
+dataID: 0270fa3e8a3d948e16b7397a94b3be11ad7221cbe702285ba142a371572630a0
+filename: example.txt
+filesize: 28
+format: txt
+creation_date: 2025-03-05T00:07:13+01:00
+storage_locations:
+  shard_0: /home/tnxl/savehere/location1,/home/tnxl/savehere/location2
+
