@@ -57,7 +57,7 @@ func main() {
 				Action: func(c *cli.Context) error {
 					metadatafile := c.Args().First()
 					if metadatafile == "" {
-						fmt.Println("Please provide a valid DataID")
+						fmt.Println("Please provide a valid Metadata file (.vmd)")
 						return nil
 					}
 					data, err := datastorage.RetrieveData(metadatafile, store, cfg, logger)

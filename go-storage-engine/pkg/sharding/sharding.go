@@ -2,7 +2,6 @@ package sharding
 
 import (
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"sync"
@@ -103,18 +102,18 @@ func (ims *InMemoryShardStore) getShardPath(dataID string, index int) string {
 // writeShardToDisk writes a shard to disk
 func (ims *InMemoryShardStore) writeShardToDisk(dataID string, index int, data []byte) error {
 	path := ims.getShardPath(dataID, index)
-	return ioutil.WriteFile(path, data, 0644)
+	return os.WriteFile(path, data, 0644)
 }
 
 // readShardFromDisk reads a shard from disk
 func (ims *InMemoryShardStore) readShardFromDisk(dataID string, index int) ([]byte, error) {
 	path := ims.getShardPath(dataID, index)
-	return ioutil.ReadFile(path)
+	return os.ReadFile(path)
 }
 
 // loadFromDisk loads all shards from disk
 func (ims *InMemoryShardStore) loadFromDisk() {
-	files, err := ioutil.ReadDir(ims.dataPath)
+	files, err := os.ReadDir(ims.dataPath)
 	if err != nil {
 		fmt.Printf("Warning: Could not read shards directory: %v\n", err)
 		return
@@ -137,7 +136,7 @@ func (ims *InMemoryShardStore) loadFromDisk() {
 
 		// Read the shard data
 		path := filepath.Join(ims.dataPath, file.Name())
-		data, err := ioutil.ReadFile(path)
+		data, err := os.ReadFile(path)
 		if err != nil {
 			continue
 		}

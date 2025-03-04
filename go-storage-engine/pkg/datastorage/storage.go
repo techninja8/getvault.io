@@ -6,7 +6,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"log"
 	"math/rand"
 	"os"
 	"strings"
@@ -55,7 +54,7 @@ func GenerateDataID(data []byte) string {
 func MetadataFileReader(filename string, key string) (string, error) {
 	file, err := os.Open(filename)
 	if err != nil {
-		return "", fmt.Errorf("Error Opening File")
+		return "", fmt.Errorf("error opening file")
 	}
 	defer file.Close()
 
@@ -77,10 +76,10 @@ func MetadataFileReader(filename string, key string) (string, error) {
 		return "", fmt.Errorf("failed to read file %w", err)
 	}
 
-	return "", errors.New("Invalid")
+	return "", errors.New("metadata file creation failed")
 }
 
-func MetadataFileNameCreator() string {
+func MetadataFileCreator() string {
 	const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 	seededRand := rand.New(rand.NewSource(time.Now().UnixNano()))
 	b := make([]byte, 12)
@@ -92,7 +91,7 @@ func MetadataFileNameCreator() string {
 
 // StoreData encrypts data, applies erasure coding, and stores each shard.
 func StoreData(data []byte, store sharding.ShardStore, cfg *config.Config, logger *zap.Logger) (string, error) {
-	newmetadatafile := MetadataFileNameCreator()
+	newmetadatafile := MetadataFileCreator()
 
 	key, err := GetEncryptionKey(cfg)
 	if err != nil {
@@ -125,12 +124,12 @@ func StoreData(data []byte, store sharding.ShardStore, cfg *config.Config, logge
 	dataToAppend := "dataID: " + dataID
 	file, err := os.OpenFile(newmetadatafile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
-		log.Fatal("Couldn't open or create new metadata file")
+		fmt.Errorf("couldn't open or create a new metadata file %w", err)
 	}
 	defer file.Close()
 
 	if _, err := file.WriteString(dataToAppend + "\n"); err != nil {
-		log.Fatal("Couldn't update metadata content, ", err)
+		fmt.Errorf("couldn't update metadata content %w", err)
 	}
 
 	logger.Info("Data stored successfully", zap.String("dataID", dataID))
@@ -143,7 +142,7 @@ func RetrieveData(metadatafile string, store sharding.ShardStore, cfg *config.Co
 	metakey := "dataID"
 	dataID, err := MetadataFileReader(metadatafile, metakey)
 	if err != nil {
-		log.Fatal("Error Reading MetaData")
+		fmt.Errorf("error reading metadata file %w", err)
 	}
 
 	totalShards := erasurecoding.DataShards + erasurecoding.ParityShards
