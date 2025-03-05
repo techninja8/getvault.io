@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"math/rand"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -22,6 +23,7 @@ import (
 var (
 	errMissingKey       = errors.New("encryption key not set in configuration")
 	errInvalidKeyLength = errors.New("invalid encryption key length; must be 32 bytes for AES-256")
+	errInvalidLocations = errors.New("invalid storage location configuration file; must contain 14 locations")
 )
 
 // GetEncryptionKey converts the configuration key from hex.
@@ -54,7 +56,7 @@ func GenerateDataID(data []byte) string {
 func MetadataFileReader(filename string, key string) (string, error) {
 	file, err := os.Open(filename)
 	if err != nil {
-		return "", fmt.Errorf("error opening file")
+		return "", fmt.Errorf("error opening file: %w", err)
 	}
 	defer file.Close()
 
@@ -73,10 +75,10 @@ func MetadataFileReader(filename string, key string) (string, error) {
 	}
 
 	if err := scanner.Err(); err != nil {
-		return "", fmt.Errorf("failed to read file %w", err)
+		return "", fmt.Errorf("failed to read file: %w", err)
 	}
 
-	return "", errors.New("metadata file creation failed")
+	return "", errors.New("key not found in metadata file")
 }
 
 func MetadataFileCreator() string {
@@ -89,8 +91,36 @@ func MetadataFileCreator() string {
 	return "vault_session_" + string(b) + ".vmd"
 }
 
+// ReadStorageLocations reads storage locations from a configuration file.
+func ReadStorageLocations(filename string) ([]string, error) {
+	file, err := os.Open(filename)
+	if err != nil {
+		return nil, fmt.Errorf("error opening storage location configuration file: %w", err)
+	}
+	defer file.Close()
+
+	var locations []string
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		location := strings.TrimSpace(scanner.Text())
+		if location != "" {
+			locations = append(locations, location)
+		}
+	}
+
+	if err := scanner.Err(); err != nil {
+		return nil, fmt.Errorf("failed to read storage location configuration file: %w", err)
+	}
+
+	if len(locations) != 14 {
+		return nil, errInvalidLocations
+	}
+
+	return locations, nil
+}
+
 // StoreData encrypts data, applies erasure coding, and stores each shard.
-func StoreData(data []byte, store sharding.ShardStore, cfg *config.Config, logger *zap.Logger) (string, error) {
+func StoreData(data []byte, store sharding.ShardStore, cfg *config.Config, locations []string, logger *zap.Logger, filePath string) (string, error) {
 	newmetadatafile := MetadataFileCreator()
 
 	key, err := GetEncryptionKey(cfg)
@@ -115,21 +145,34 @@ func StoreData(data []byte, store sharding.ShardStore, cfg *config.Config, logge
 
 	// Store each shard.
 	for idx, shard := range shards {
-		if err := store.StoreShard(dataID, idx, shard); err != nil {
-			logger.Error("Storing shard failed", zap.Int("shard", idx), zap.Error(err))
+		location := locations[idx] // Use locations from the configuration file
+		logger.Info("Storing shard", zap.Int("shard", idx), zap.String("location", location))
+		if err := store.StoreShard(dataID, idx, shard, location); err != nil {
+			logger.Error("Storing shard failed", zap.Int("shard", idx), zap.String("location", location), zap.Error(err))
 			return "", err
 		}
 	}
 
-	dataToAppend := "dataID: " + dataID
+	// Extract filename and format
+	filename := filepath.Base(filePath)
+	format := strings.TrimPrefix(filepath.Ext(filePath), ".")
+
+	// Update metadata file with new fields
+	logger.Info("Updating metadata file", zap.String("metadataFile", newmetadatafile))
+	dataToAppend := fmt.Sprintf("dataID: %s\nfilename: %s\nfilesize: %d\nformat: %s\ncreation_date: %s\n", dataID, filename, len(data), format, time.Now().Format(time.RFC3339))
+	dataToAppend += "storage_locations:\n"
+	for idx, location := range locations {
+		dataToAppend += fmt.Sprintf("  shard_%d: %s\n", idx, location)
+	}
+
 	file, err := os.OpenFile(newmetadatafile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
-		fmt.Errorf("couldn't open or create a new metadata file %w", err)
+		return "", fmt.Errorf("couldn't open or create a new metadata file: %w", err)
 	}
 	defer file.Close()
 
-	if _, err := file.WriteString(dataToAppend + "\n"); err != nil {
-		fmt.Errorf("couldn't update metadata content %w", err)
+	if _, err := file.WriteString(dataToAppend); err != nil {
+		return "", fmt.Errorf("couldn't update metadata content: %w", err)
 	}
 
 	logger.Info("Data stored successfully", zap.String("dataID", dataID))
@@ -142,16 +185,28 @@ func RetrieveData(metadatafile string, store sharding.ShardStore, cfg *config.Co
 	metakey := "dataID"
 	dataID, err := MetadataFileReader(metadatafile, metakey)
 	if err != nil {
-		fmt.Errorf("error reading metadata file %w", err)
+		return nil, fmt.Errorf("error reading metadata file: %w", err)
+	}
+
+	// Read storage locations from the metadata file
+	locations := make([]string, 14)
+	for i := 0; i < 14; i++ {
+		key := fmt.Sprintf("shard_%d", i)
+		location, err := MetadataFileReader(metadatafile, key)
+		if err != nil {
+			return nil, fmt.Errorf("error reading shard location from metadata file: %w", err)
+		}
+		locations[i] = location
 	}
 
 	totalShards := erasurecoding.DataShards + erasurecoding.ParityShards
 	shards := make([][]byte, totalShards)
 	missing := 0
 	for i := 0; i < totalShards; i++ {
-		shard, err := store.RetrieveShard(dataID, i)
+		location := locations[i] // Retrieve from respective locations
+		shard, err := store.RetrieveShard(dataID, i, location)
 		if err != nil {
-			logger.Warn("Shard retrieval failed", zap.Int("index", i), zap.Error(err))
+			logger.Warn("Shard retrieval failed", zap.Int("index", i), zap.String("location", location), zap.Error(err))
 			shards[i] = nil
 			missing++
 		} else {

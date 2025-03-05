@@ -27,15 +27,22 @@ func main() {
 				Name:  "store",
 				Usage: "Store a file",
 				Action: func(c *cli.Context) error {
-					if c.NArg() < 1 {
-						return fmt.Errorf("please provide a file to store")
+					if c.NArg() < 2 {
+						return fmt.Errorf("please provide a file to store and a storage location configuration file")
 					}
 					filePath := c.Args().Get(0)
+					storageConfigPath := c.Args().Get(1)
+
+					locations, err := datastorage.ReadStorageLocations(storageConfigPath)
+					if err != nil {
+						return fmt.Errorf("failed to read storage location configuration file: %w", err)
+					}
+
 					data, err := os.ReadFile(filePath)
 					if err != nil {
 						return fmt.Errorf("failed to read file: %w", err)
 					}
-					dataID, err := datastorage.StoreData(data, store, cfg, logger)
+					dataID, err := datastorage.StoreData(data, store, cfg, locations, logger, filePath)
 					if err != nil {
 						logger.Error("Store failed", zap.Error(err))
 						return fmt.Errorf("store failed: %w", err)
@@ -57,11 +64,17 @@ func main() {
 						logger.Error("Retrieve failed", zap.Error(err))
 						return fmt.Errorf("retrieve failed: %w", err)
 					}
-					outputFile := "retrieved_data.txt"
-					if err := os.WriteFile(outputFile, data, 0644); err != nil {
+
+					// Read filename from metadata file
+					filename, err := datastorage.MetadataFileReader(metadataFile, "filename")
+					if err != nil {
+						return fmt.Errorf("failed to read filename from metadata file: %w", err)
+					}
+
+					if err := os.WriteFile(filename, data, 0644); err != nil {
 						return fmt.Errorf("failed to write retrieved data: %w", err)
 					}
-					fmt.Printf("Data retrieved and saved to: %s\n", outputFile)
+					fmt.Printf("Data retrieved and saved to: %s\n", filename)
 					return nil
 				},
 			},

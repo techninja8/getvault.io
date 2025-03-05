@@ -1,0 +1,24 @@
+This is a test file for the vault storage system.
+It contains some example data to be encrypted, sharded, and distributed across multiple locations.
+Line 1 of example data.
+Line 2 of example data.
+Line 3 of example data.
+Line 4 of example data.
+Line 5 of example data.
+Line 6 of example data.
+Line 7 of example data.
+Line 8 of example data.
+Line 9 of example data.
+Line 10 of example data.
+This is a test file for the vault storage system.
+It contains some example data to be encrypted, sharded, and distributed across multiple locations.
+Line 1 of example data.
+Line 2 of example data.
+Line 3 of example data.
+Line 4 of example data.
+Line 5 of example data.
+Line 6 of example data.
+Line 7 of example data.
+Line 8 of example data.
+Line 9 of example data.
+Line 10 of example data.

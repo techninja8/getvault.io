@@ -1,6 +1,7 @@
 package encryption
 
 import (
+	"bytes"
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/rand"
@@ -36,5 +37,5 @@ func Decrypt(cipherText, key []byte) ([]byte, error) {
 	cipherText = cipherText[aes.BlockSize:]
 	stream := cipher.NewCFBDecrypter(block, iv)
 	stream.XORKeyStream(cipherText, cipherText)
-	return cipherText, nil
+	return bytes.Trim(cipherText, "\x00"), nil
 }
