@@ -160,10 +160,12 @@ func StoreData(data []byte, store sharding.ShardStore, cfg *config.Config, locat
 	// Update metadata file with new fields
 	logger.Info("Updating metadata file", zap.String("metadataFile", newmetadatafile))
 	dataToAppend := fmt.Sprintf("dataID: %s\nfilename: %s\nfilesize: %d\nformat: %s\ncreation_date: %s\n", dataID, filename, len(data), format, time.Now().Format(time.RFC3339))
-	dataToAppend += "storage_locations:\n"
+	dataToAppend += "storage_locations: "
+	dataToAppend += "{\n"
 	for idx, location := range locations {
 		dataToAppend += fmt.Sprintf("  shard_%d: %s\n", idx, location)
 	}
+	dataToAppend += "}\n"
 
 	file, err := os.OpenFile(newmetadatafile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {

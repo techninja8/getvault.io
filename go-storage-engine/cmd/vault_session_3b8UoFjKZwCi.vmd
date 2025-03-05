@@ -1,8 +1,8 @@
-dataID: be396602f7b437ad80b36915cb4d204dfc39d4fecd3e4df9a60d9f7b63e95489
+dataID: 38136510fbac3b1211c34d84491faa8dcbd8ed61b5e5bd1895a103b798a20808
 filename: newexample.file
 filesize: 390
 format: file
-creation_date: 2025-03-05T07:46:11+01:00
+creation_date: 2025-03-05T13:17:07+01:00
 storage_locations: {
   shard_0: /home/tnxl/target/location_0
   shard_1: /home/tnxl/newtarget/newlocation_1
