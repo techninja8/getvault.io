@@ -1,0 +1,21 @@
+dataID: be396602f7b437ad80b36915cb4d204dfc39d4fecd3e4df9a60d9f7b63e95489
+filename: newexample.file
+filesize: 390
+format: file
+creation_date: 2025-03-05T07:46:11+01:00
+storage_locations: {
+  shard_0: /home/tnxl/target/location_0
+  shard_1: /home/tnxl/newtarget/newlocation_1
+  shard_2: /home/tnxl/target/location_2
+  shard_3: /home/tnxl/target/location_3
+  shard_4: /home/tnxl/target/location_4
+  shard_5: /home/tnxl/newtarget/newlocation_2
+  shard_6: /home/tnxl/target/location_6
+  shard_7: /home/tnxl/target/location_7
+  shard_8: /home/tnxl/target/location_8
+  shard_9: /home/tnxl/newtarget/newlocation_3
+  shard_10: /home/tnxl/target/location_10
+  shard_11: /home/tnxl/target/location_11
+  shard_12: /home/tnxl/target/location_12
+  shard_13: /home/tnxl/newtarget/newlocation_4
+}

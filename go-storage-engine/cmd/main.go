@@ -1,8 +1,10 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/urfave/cli/v2"
 	"go.uber.org/zap"
@@ -21,11 +23,12 @@ func main() {
 
 	app := &cli.App{
 		Name:  "vault",
-		Usage: "A CLI for storing and retrieving encrypted, erasure-coded data",
+		Usage: "Distributed Storage and Retrieval of Erasure-coded Data Shards Using Vault's Storage Engine",
 		Commands: []*cli.Command{
 			{
-				Name:  "store",
-				Usage: "Store a file",
+				Name:    "store",
+				Aliases: []string{"s"},
+				Usage:   "Store data. Usage: store \"filename\" \"storage-location-configuration\"",
 				Action: func(c *cli.Context) error {
 					if c.NArg() < 2 {
 						return fmt.Errorf("please provide a file to store and a storage location configuration file")
@@ -52,8 +55,9 @@ func main() {
 				},
 			},
 			{
-				Name:  "retrieve",
-				Usage: "Retrieve data using a metadata file",
+				Name:    "retrieve",
+				Aliases: []string{"r"},
+				Usage:   "Retrieve Data From Metadata File. Usage: retrieve <metadatafile>",
 				Action: func(c *cli.Context) error {
 					if c.NArg() < 1 {
 						return fmt.Errorf("please provide a metadata file")
@@ -75,6 +79,22 @@ func main() {
 						return fmt.Errorf("failed to write retrieved data: %w", err)
 					}
 					fmt.Printf("Data retrieved and saved to: %s\n", filename)
+					return nil
+				},
+			},
+			{
+				Name:    "exit",
+				Aliases: []string{"x"},
+				Usage:   "Exit the CLI",
+				Action: func(c *cli.Context) error {
+					reader := bufio.NewReader(os.Stdin)
+					fmt.Print("Are you sure you want to exit? (y/n): ")
+					resp, _ := reader.ReadString('\n')
+					resp = strings.TrimSpace(strings.ToLower(resp))
+					if resp == "y" || resp == "yes" {
+						fmt.Println("Exiting CLI...")
+						os.Exit(0)
+					}
 					return nil
 				},
 			},
