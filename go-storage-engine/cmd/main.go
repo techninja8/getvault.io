@@ -3,16 +3,27 @@ package main
 import (
 	"bufio"
 	"fmt"
+	"log"
 	"os"
 	"strings"
 
+	"github.com/joho/godotenv"
 	"github.com/urfave/cli/v2"
 	"go.uber.org/zap"
 
 	"github.com/techninja8/getvault.io/pkg/config"
 	"github.com/techninja8/getvault.io/pkg/datastorage"
+	"github.com/techninja8/getvault.io/pkg/proofofinclusion"
 	"github.com/techninja8/getvault.io/pkg/sharding"
 )
+
+func init() {
+	// Load environment variables from .env file if it exists
+	err := godotenv.Load()
+	if err != nil {
+		log.Println(".env file not found")
+	}
+}
 
 func main() {
 	logger, _ := zap.NewProduction()
@@ -79,6 +90,65 @@ func main() {
 						return fmt.Errorf("failed to write retrieved data: %w", err)
 					}
 					fmt.Printf("Data retrieved and saved to: %s\n", filename)
+					return nil
+				},
+			},
+			{
+				Name:    "verify",
+				Aliases: []string{"v"},
+				Usage:   "Verify data availability using cryptographic proofs. Usage: verify <metadatafile>",
+				Action: func(c *cli.Context) error {
+					if c.NArg() < 1 {
+						return fmt.Errorf("please provide a metadata file")
+					}
+					metadataFile := c.Args().Get(0)
+
+					// Read dataID from metadata file
+					dataID, err := datastorage.MetadataFileReader(metadataFile, "dataID")
+					if err != nil {
+						return fmt.Errorf("failed to read dataID from metadata file: %w", err)
+					}
+
+					// Read storage locations from metadata file
+					locations := make([]string, 14)
+					for i := 0; i < 14; i++ {
+						key := fmt.Sprintf("shard_%d", i)
+						location, err := datastorage.MetadataFileReader(metadataFile, key)
+						if err != nil {
+							return fmt.Errorf("failed to read shard location from metadata file: %w", err)
+						}
+						locations[i] = location
+					}
+
+					// Retrieve shards from the storage locations
+					shards := make([][]byte, len(locations))
+					for i, location := range locations {
+						shard, err := store.RetrieveShard(dataID, i, location)
+						if err != nil {
+							logger.Warn("Shard retrieval failed", zap.Int("index", i), zap.String("location", location), zap.Error(err))
+							continue
+						}
+						shards[i] = shard
+					}
+
+					// Build Merkle Tree
+					tree, err := proofofinclusion.BuildMerkleTree(shards)
+					if err != nil {
+						return fmt.Errorf("failed to build Merkle tree: %w", err)
+					}
+
+					// Generate and print proof for each shard
+					for i, shard := range shards {
+						if shard == nil {
+							continue
+						}
+						proof, err := proofofinclusion.GetProof(tree, shard)
+						if err != nil {
+							return fmt.Errorf("failed to get proof for shard %d: %w", i, err)
+						}
+						fmt.Printf("Proof for shard %d: %s\n", i, proof)
+					}
+
 					return nil
 				},
 			},
