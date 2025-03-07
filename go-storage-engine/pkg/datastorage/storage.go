@@ -123,6 +123,14 @@ func ReadStorageLocations(filename string) ([]string, error) {
 func StoreData(data []byte, store sharding.ShardStore, cfg *config.Config, locations []string, logger *zap.Logger, filePath string) (string, error) {
 	newmetadatafile := MetadataFileCreator()
 
+	// Check if the data starts with ZIP signature for debugging
+	if len(data) >= 4 {
+		//logger.Info("Data header signature", zap.String("hex", fmt.Sprintf("%x", data[:4])))
+		if string(data[:4]) != "PK\x03\x04" && strings.HasSuffix(filePath, ".zip") {
+			logger.Warn("Expected ZIP file doesn't have proper signature")
+		}
+	}
+
 	key, err := GetEncryptionKey(cfg)
 	if err != nil {
 		logger.Error("Failed to get encryption key", zap.Error(err))
@@ -143,10 +151,17 @@ func StoreData(data []byte, store sharding.ShardStore, cfg *config.Config, locat
 		return "", err
 	}
 
+	// Let's see, first log total shards size for debugging
+	totalShardSize := 0
+	for _, shard := range shards {
+		totalShardSize += len(shard)
+	}
+	//logger.Info("Total size of all shards", zap.Int("size", totalShardSize))
+
 	// Store each shard.
 	for idx, shard := range shards {
 		location := locations[idx] // Use locations from the configuration file
-		logger.Info("Storing shard", zap.Int("shard", idx), zap.String("location", location))
+		//logger.Info("Storing shard", zap.Int("shard", idx), zap.String("location", location), zap.Int("size", len(shard)))
 		if err := store.StoreShard(dataID, idx, shard, location); err != nil {
 			logger.Error("Storing shard failed", zap.Int("shard", idx), zap.String("location", location), zap.Error(err))
 			return "", err
@@ -158,10 +173,9 @@ func StoreData(data []byte, store sharding.ShardStore, cfg *config.Config, locat
 	format := strings.TrimPrefix(filepath.Ext(filePath), ".")
 
 	// Update metadata file with new fields
-	logger.Info("Updating metadata file", zap.String("metadataFile", newmetadatafile))
+	//logger.Info("Updating metadata file", zap.String("metadataFile", newmetadatafile))
 	dataToAppend := fmt.Sprintf("dataID: %s\nfilename: %s\nfilesize: %d\nformat: %s\ncreation_date: %s\n", dataID, filename, len(data), format, time.Now().Format(time.RFC3339))
-	dataToAppend += "storage_locations: "
-	dataToAppend += "{\n"
+	dataToAppend += "storage_locations: {\n"
 	for idx, location := range locations {
 		dataToAppend += fmt.Sprintf("  shard_%d: %s\n", idx, location)
 	}
@@ -177,7 +191,7 @@ func StoreData(data []byte, store sharding.ShardStore, cfg *config.Config, locat
 		return "", fmt.Errorf("couldn't update metadata content: %w", err)
 	}
 
-	logger.Info("Data stored successfully", zap.String("dataID", dataID))
+	//logger.Info("Data stored successfully", zap.String("dataID", dataID))
 	return dataID, nil
 }
 
@@ -212,6 +226,7 @@ func RetrieveData(metadatafile string, store sharding.ShardStore, cfg *config.Co
 			shards[i] = nil
 			missing++
 		} else {
+			//logger.Info("Retrieved shard", zap.Int("index", i), zap.String("location", location))
 			shards[i] = shard
 		}
 	}
@@ -236,5 +251,12 @@ func RetrieveData(metadatafile string, store sharding.ShardStore, cfg *config.Co
 		logger.Error("Decryption failed", zap.Error(err))
 		return nil, err
 	}
+
+	// Validate if this is a ZIP file by checking for ZIP signature (PK header)
+	if len(plainText) >= 4 && string(plainText[:4]) != "PK\x03\x04" {
+		logger.Warn("Retrieved data does not have a valid ZIP file signature",
+			zap.String("signature", fmt.Sprintf("%x", plainText[:4])))
+	}
+
 	return plainText, nil
 }

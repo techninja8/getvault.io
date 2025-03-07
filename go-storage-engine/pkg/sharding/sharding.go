@@ -19,6 +19,7 @@ type InMemoryShardStore struct {
 }
 
 func NewInMemoryShardStore() *InMemoryShardStore {
+	/// This should leave a message
 	store := &InMemoryShardStore{
 		ShardStore: make(map[string]map[int][]byte),
 	}

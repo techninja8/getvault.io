@@ -41,5 +41,7 @@ func Decode(shards [][]byte) ([]byte, error) {
 	if err = enc.Join(&buf, shards, len(shards[0])*DataShards); err != nil {
 		return nil, err
 	}
-	return bytes.Trim(buf.Bytes(), "\x00"), nil
+	//return bytes.Trim(buf.Bytes(), "\x00"), nil
+
+	return buf.Bytes(), nil
 }
