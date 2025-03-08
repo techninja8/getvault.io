@@ -14,7 +14,6 @@ import (
 
 	"github.com/techninja8/getvault.io/pkg/config"
 	"github.com/techninja8/getvault.io/pkg/datastorage"
-	"github.com/techninja8/getvault.io/pkg/proofofinclusion"
 	"github.com/techninja8/getvault.io/pkg/sharding"
 )
 
@@ -56,21 +55,21 @@ func main() {
 					if info.IsDir() {
 						// Zip the directory
 						zipFilePath := filepath.Join(os.TempDir(), filepath.Base(path)+".zip")
-						//logger.Info("Zipping directory",
-						//	zap.String("source", path),
-						//	zap.String("target", zipFilePath))
+						logger.Info("Zipping directory",
+							zap.String("source", path),
+							zap.String("target", zipFilePath))
 
 						err = datastorage.ZipDirectory(path, zipFilePath)
 						if err != nil {
 							return fmt.Errorf("failed to zip directory: %w", err)
 						}
 
-						// Verify the zip file before storing (Debugging)
-						/* zipFileInfo, err := os.Stat(zipFilePath)
+						// Verify the zip file before storing
+						zipFileInfo, err := os.Stat(zipFilePath)
 						if err != nil {
 							return fmt.Errorf("failed to stat zip file: %w", err)
 						}
-						logger.Info("Original zip file size", zap.Int64("size", zipFileInfo.Size())) */
+						logger.Info("Original zip file size", zap.Int64("size", zipFileInfo.Size()))
 
 						// Validate the zip format
 						isValid, err := datastorage.IsValidZipFile(zipFilePath)
@@ -85,13 +84,13 @@ func main() {
 							return fmt.Errorf("failed to open created zip: %w", err)
 						}
 
-						//logger.Info("ZIP archive contains", zap.Int("files", len(zipReader.File)))
-						/* for i, f := range zipReader.File {
+						logger.Info("ZIP archive contains", zap.Int("files", len(zipReader.File)))
+						for i, f := range zipReader.File {
 							logger.Info("ZIP entry",
 								zap.Int("index", i),
 								zap.String("name", f.Name),
 								zap.Int64("size", int64(f.UncompressedSize64)))
-						} */
+						}
 						zipReader.Close()
 
 						filePath = zipFilePath
@@ -150,7 +149,7 @@ func main() {
 					}
 
 					// Debugging: Check the size of the retrieved data
-					//logger.Info("Retrieved data size", zap.Int("size", len(data)))
+					logger.Info("Retrieved data size", zap.Int("size", len(data)))
 
 					// Check if we expect a ZIP file
 					isZipFile := strings.HasSuffix(filename, ".zip")
@@ -183,14 +182,26 @@ func main() {
 							logger.Error("Failed to unzip file", zap.Error(err))
 							return fmt.Errorf("failed to unzip file: %w", err)
 						}
-
 						fmt.Printf("Data extracted to: %s\n", extractDir)
-						err = os.Remove(filename)
-						if err != nil {
-							logger.Error("Failed to remove zip file", zap.Error(err))
-						}
 					}
 
+					return nil
+				},
+			},
+			{
+				Name:    "set-storage",
+				Aliases: []string{"strl"},
+				Usage:   "Setup storage location configuration file. Usage: set-storage <location_1> <location_2> ... <location_14>",
+				Action: func(c *cli.Context) error {
+					if c.NArg() < 14 {
+						return fmt.Errorf("storage locations incomplete, requires 14 locations")
+					}
+					locations := c.Args().Slice()
+					_, err := datastorage.SetupStorage(locations, logger)
+					if err != nil {
+						return fmt.Errorf("failed to setup storage locations: %w", err)
+					}
+					fmt.Println("Storage location configuration file created successfully")
 					return nil
 				},
 			},
@@ -205,52 +216,11 @@ func main() {
 					metadataFile := c.Args().Get(0)
 
 					err := datastorage.Retry(3, 2*time.Second, logger, func() error {
-						// Read dataID from metadata file
-						dataID, err := datastorage.MetadataFileReader(metadataFile, "dataID")
+						err := datastorage.VerifyData(metadataFile, store, logger)
 						if err != nil {
-							return fmt.Errorf("failed to read dataID from metadata file: %w", err)
+							logger.Error("Verification failed", zap.Error(err))
+							return fmt.Errorf("verification failed: %w", err)
 						}
-
-						// Read storage locations from metadata file
-						locations := make([]string, 14)
-						for i := 0; i < 14; i++ {
-							key := fmt.Sprintf("shard_%d", i)
-							location, err := datastorage.MetadataFileReader(metadataFile, key)
-							if err != nil {
-								return fmt.Errorf("failed to read shard location from metadata file: %w", err)
-							}
-							locations[i] = location
-						}
-
-						// Retrieve shards from the storage locations
-						shards := make([][]byte, len(locations))
-						for i, location := range locations {
-							shard, err := store.RetrieveShard(dataID, i, location)
-							if err != nil {
-								logger.Warn("Shard retrieval failed", zap.Int("index", i), zap.String("location", location), zap.Error(err))
-								continue
-							}
-							shards[i] = shard
-						}
-
-						// Build Merkle Tree
-						tree, err := proofofinclusion.BuildMerkleTree(shards)
-						if err != nil {
-							return fmt.Errorf("failed to build Merkle tree: %w", err)
-						}
-
-						// Generate and print proof for each shard
-						for i, shard := range shards {
-							if shard == nil {
-								continue
-							}
-							proof, err := proofofinclusion.GetProof(tree, shard)
-							if err != nil {
-								return fmt.Errorf("failed to get proof for shard %d: %w", i, err)
-							}
-							fmt.Printf("Proof for shard %d: %s\n", i, proof)
-						}
-
 						return nil
 					})
 					if err != nil {

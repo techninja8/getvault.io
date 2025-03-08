@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"log"
 	"math/rand"
 	"os"
 	"path/filepath"
@@ -17,6 +18,7 @@ import (
 	"github.com/techninja8/getvault.io/pkg/config"
 	"github.com/techninja8/getvault.io/pkg/encryption"
 	"github.com/techninja8/getvault.io/pkg/erasurecoding"
+	"github.com/techninja8/getvault.io/pkg/proofofinclusion"
 	"github.com/techninja8/getvault.io/pkg/sharding"
 )
 
@@ -91,6 +93,16 @@ func MetadataFileCreator() string {
 	return "vault_session_" + string(b) + ".vmd"
 }
 
+func StorageLocationFileCreator() string {
+	const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+	seededRand := rand.New(rand.NewSource(time.Now().UnixNano()))
+	b := make([]byte, 12)
+	for i := range b {
+		b[i] = charset[seededRand.Intn(len(charset))]
+	}
+	return "strl_" + string(b) + ".config"
+}
+
 // ReadStorageLocations reads storage locations from a configuration file.
 func ReadStorageLocations(filename string) ([]string, error) {
 	file, err := os.Open(filename)
@@ -123,9 +135,12 @@ func ReadStorageLocations(filename string) ([]string, error) {
 func StoreData(data []byte, store sharding.ShardStore, cfg *config.Config, locations []string, logger *zap.Logger, filePath string) (string, error) {
 	newmetadatafile := MetadataFileCreator()
 
+	// Log original data size for debugging
+	logger.Info("Original data size before encryption", zap.Int("size", len(data)))
+
 	// Check if the data starts with ZIP signature for debugging
 	if len(data) >= 4 {
-		//logger.Info("Data header signature", zap.String("hex", fmt.Sprintf("%x", data[:4])))
+		logger.Info("Data header signature", zap.String("hex", fmt.Sprintf("%x", data[:4])))
 		if string(data[:4]) != "PK\x03\x04" && strings.HasSuffix(filePath, ".zip") {
 			logger.Warn("Expected ZIP file doesn't have proper signature")
 		}
@@ -143,6 +158,9 @@ func StoreData(data []byte, store sharding.ShardStore, cfg *config.Config, locat
 		return "", err
 	}
 
+	// Log encrypted data size for debugging
+	logger.Info("Encrypted data size", zap.Int("size", len(cipherText)))
+
 	dataID := GenerateDataID(cipherText)
 
 	shards, err := erasurecoding.Encode(cipherText)
@@ -151,17 +169,17 @@ func StoreData(data []byte, store sharding.ShardStore, cfg *config.Config, locat
 		return "", err
 	}
 
-	// Let's see, first log total shards size for debugging
+	// Log total shards size for debugging
 	totalShardSize := 0
 	for _, shard := range shards {
 		totalShardSize += len(shard)
 	}
-	//logger.Info("Total size of all shards", zap.Int("size", totalShardSize))
+	logger.Info("Total size of all shards", zap.Int("size", totalShardSize))
 
 	// Store each shard.
 	for idx, shard := range shards {
 		location := locations[idx] // Use locations from the configuration file
-		//logger.Info("Storing shard", zap.Int("shard", idx), zap.String("location", location), zap.Int("size", len(shard)))
+		logger.Info("Storing shard", zap.Int("shard", idx), zap.String("location", location), zap.Int("size", len(shard)))
 		if err := store.StoreShard(dataID, idx, shard, location); err != nil {
 			logger.Error("Storing shard failed", zap.Int("shard", idx), zap.String("location", location), zap.Error(err))
 			return "", err
@@ -173,11 +191,28 @@ func StoreData(data []byte, store sharding.ShardStore, cfg *config.Config, locat
 	format := strings.TrimPrefix(filepath.Ext(filePath), ".")
 
 	// Update metadata file with new fields
-	//logger.Info("Updating metadata file", zap.String("metadataFile", newmetadatafile))
+	logger.Info("Updating metadata file", zap.String("metadataFile", newmetadatafile))
 	dataToAppend := fmt.Sprintf("dataID: %s\nfilename: %s\nfilesize: %d\nformat: %s\ncreation_date: %s\n", dataID, filename, len(data), format, time.Now().Format(time.RFC3339))
 	dataToAppend += "storage_locations: {\n"
 	for idx, location := range locations {
 		dataToAppend += fmt.Sprintf("  shard_%d: %s\n", idx, location)
+	}
+	dataToAppend += "}\n"
+	dataToAppend += "Proofs: {\n"
+	tree, err := proofofinclusion.BuildMerkleTree(shards)
+	if err != nil {
+		log.Fatal("failed to build Merkle tree: %w", err)
+	}
+	for i, shard := range shards {
+		if shard == nil {
+			continue
+		}
+		proof, err := proofofinclusion.GetProof(tree, shard)
+		if err != nil {
+			log.Fatal("failed to get proof for shard")
+		}
+		proof_of_shard := fmt.Sprintf("Proof for shard %d: %s\n", i, proof)
+		dataToAppend += "  " + proof_of_shard
 	}
 	dataToAppend += "}\n"
 
@@ -191,7 +226,7 @@ func StoreData(data []byte, store sharding.ShardStore, cfg *config.Config, locat
 		return "", fmt.Errorf("couldn't update metadata content: %w", err)
 	}
 
-	//logger.Info("Data stored successfully", zap.String("dataID", dataID))
+	logger.Info("Data stored successfully", zap.String("dataID", dataID))
 	return dataID, nil
 }
 
@@ -226,7 +261,7 @@ func RetrieveData(metadatafile string, store sharding.ShardStore, cfg *config.Co
 			shards[i] = nil
 			missing++
 		} else {
-			//logger.Info("Retrieved shard", zap.Int("index", i), zap.String("location", location))
+			logger.Info("Retrieved shard", zap.Int("index", i), zap.String("location", location))
 			shards[i] = shard
 		}
 	}
@@ -240,6 +275,9 @@ func RetrieveData(metadatafile string, store sharding.ShardStore, cfg *config.Co
 		return nil, err
 	}
 
+	// Debugging: Check the size of the reconstructed cipherText
+	logger.Info("Reconstructed cipherText size", zap.Int("size", len(cipherText)))
+
 	key, err := GetEncryptionKey(cfg)
 	if err != nil {
 		logger.Error("Failed to get encryption key", zap.Error(err))
@@ -252,6 +290,9 @@ func RetrieveData(metadatafile string, store sharding.ShardStore, cfg *config.Co
 		return nil, err
 	}
 
+	// Debugging: Check the size of the decrypted plainText
+	logger.Info("Decrypted plainText size", zap.Int("size", len(plainText)))
+
 	// Validate if this is a ZIP file by checking for ZIP signature (PK header)
 	if len(plainText) >= 4 && string(plainText[:4]) != "PK\x03\x04" {
 		logger.Warn("Retrieved data does not have a valid ZIP file signature",
@@ -259,4 +300,94 @@ func RetrieveData(metadatafile string, store sharding.ShardStore, cfg *config.Co
 	}
 
 	return plainText, nil
+}
+
+// VerifyData verifies the data availability using cryptographic proofs.
+func VerifyData(metadatafile string, store sharding.ShardStore, logger *zap.Logger) error {
+	dataID, err := MetadataFileReader(metadatafile, "dataID")
+	if err != nil {
+		return fmt.Errorf("error reading metadata file: %w", err)
+	}
+
+	// Read storage locations from the metadata file
+	locations := make([]string, 14)
+	for i := 0; i < 14; i++ {
+		key := fmt.Sprintf("shard_%d", i)
+		location, err := MetadataFileReader(metadatafile, key)
+		if err != nil {
+			return fmt.Errorf("error reading shard location from metadata file: %w", err)
+		}
+		locations[i] = location
+	}
+
+	// Retrieve shards from the storage locations
+	shards := make([][]byte, len(locations))
+	for i, location := range locations {
+		shard, err := store.RetrieveShard(dataID, i, location)
+		if err != nil {
+			logger.Warn("Shard retrieval failed", zap.Int("index", i), zap.String("location", location), zap.Error(err))
+			continue
+		}
+		shards[i] = shard
+	}
+
+	// Build Merkle Tree
+	tree, err := proofofinclusion.BuildMerkleTree(shards)
+	if err != nil {
+		return fmt.Errorf("failed to build Merkle tree: %w", err)
+	}
+
+	// Read original proofs from metadata file
+	proofs := make([]string, 14)
+	for i := 0; i < 14; i++ {
+		key := fmt.Sprintf("Proof for shard %d", i)
+		proof, err := MetadataFileReader(metadatafile, key)
+		if err != nil {
+			return fmt.Errorf("failed to read proof from metadata file: %w", err)
+		}
+		proofs[i] = proof
+	}
+
+	// Generate and compare proof for each shard
+	for i, shard := range shards {
+		if shard == nil {
+			continue
+		}
+		proof, err := proofofinclusion.GetProof(tree, shard)
+		if err != nil {
+			return fmt.Errorf("failed to get proof for shard %d: %w", i, err)
+		}
+		fmt.Printf("Shard_%d Verification: %t\n", i, proof == proofs[i])
+	}
+
+	return nil
+}
+
+// SetupStorage sets up the storage location configuration file.
+func SetupStorage(locations []string, logger *zap.Logger) (string, error) {
+	if len(locations) != 14 {
+		return "", fmt.Errorf("storage locations incomplete, requires 14 locations")
+	}
+
+	for _, location := range locations {
+		if location == "" {
+			return "", fmt.Errorf("invalid storage location: %s", location)
+		}
+	}
+
+	storageFile := StorageLocationFileCreator()
+	file, err := os.OpenFile(storageFile, os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		return "", fmt.Errorf("failed to create storage location configuration file: %w", err)
+	}
+	defer file.Close()
+
+	for _, location := range locations {
+		if _, err := file.WriteString(location + "\n"); err != nil {
+			return "", fmt.Errorf("failed to write to storage location configuration file: %w", err)
+		}
+	}
+
+	logger.Info("Storage location configuration file created successfully", zap.String("file", storageFile))
+	return storageFile, nil
 }
